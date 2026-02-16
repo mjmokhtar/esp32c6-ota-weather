@@ -5,6 +5,7 @@
 #include "esp_err.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_netif.h"
 
 // WiFi Configuration
 #define WIFI_AP_SSID            "ESP32-C6-Setup"
@@ -43,17 +44,16 @@ typedef void (*wifi_disconnected_cb_t)(void);
 // Function Prototypes
 esp_err_t wifi_manager_init(void);
 esp_err_t wifi_manager_start_ap(void);
-esp_err_t wifi_manager_start_sta(void);
+esp_err_t wifi_manager_start_apsta_auto(void);
 esp_err_t wifi_manager_save_credentials(const char *ssid, const char *password);
 esp_err_t wifi_manager_load_credentials(wifi_credentials_t *creds);
 bool wifi_manager_has_credentials(void);
 wifi_state_t wifi_manager_get_state(void);
 void wifi_manager_set_connected_callback(wifi_connected_cb_t callback);
 void wifi_manager_set_disconnected_callback(wifi_disconnected_cb_t callback);
-// Web server for provisioning
-esp_err_t wifi_manager_start_webserver(void);
-esp_err_t wifi_manager_stop_webserver(void);
-// Start WiFi in APSTA mode (AP + STA simultaneously)
-esp_err_t wifi_manager_start_apsta(void);
-esp_err_t wifi_manager_start_apsta_auto(void);
+
+// Get network info
+esp_netif_t* wifi_manager_get_sta_netif(void);
+esp_netif_t* wifi_manager_get_ap_netif(void);
+
 #endif // WIFI_MANAGER_H
