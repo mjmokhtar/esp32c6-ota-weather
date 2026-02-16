@@ -7,4 +7,5 @@ idf_component_register(
         sntp_sync 
         ota_manager 
         web_server
+        weather_client
 )

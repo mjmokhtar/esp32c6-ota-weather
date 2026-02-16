@@ -11,6 +11,7 @@
 #include "sntp_sync.h"
 #include "ota_manager.h"
 #include "web_server.h"
+#include "weather_client.h"
 
 static const char *TAG = "MAIN";
 
@@ -30,6 +31,11 @@ void on_wifi_connected(void)
     // Initialize SNTP time sync
     ESP_LOGI(TAG, "Starting SNTP time synchronization...");
     sntp_sync_init();
+
+    // Initialize weather client
+    ESP_LOGI(TAG, "Initializing weather client...");
+    weather_client_init();
+    weather_client_start();
     
     // Start web server (if not already running)
     if (!web_server_is_running()) {

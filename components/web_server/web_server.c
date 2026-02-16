@@ -6,6 +6,7 @@
 #include "ota_manager.h"
 #include "sntp_sync.h"
 #include "led_indicator.h"
+#include "weather_client.h"
 #include <string.h>
 
 static const char *TAG = "WEB_SERVER";
@@ -81,6 +82,15 @@ static const char *provisioning_html =
 // Divider
 ".divider{height:1px;background:linear-gradient(to right,transparent,#e2e8f0,transparent);margin:24px 0}"
 
+// Weather display
+".weather-display{display:flex;justify-content:space-around;align-items:center;padding:16px 0}"
+".weather-item{text-align:center;flex:1}"
+".weather-icon{font-size:48px;margin-bottom:8px}"
+".weather-value{font-size:28px;font-weight:700;color:#2d3748}"
+".weather-unit{font-size:16px;color:#718096}"
+".weather-label{font-size:12px;color:#a0aec0;margin-top:4px;text-transform:uppercase;letter-spacing:1px}"
+".weather-update{text-align:center;font-size:11px;color:#a0aec0;margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0}"
+
 "</style>"
 "</head>"
 "<body>"
@@ -98,6 +108,14 @@ static const char *provisioning_html =
 "<div class='time-value' id='timeDisplay'>--:--:--</div>"
 "<div class='date-value' id='dateDisplay'>--.--.----</div>"
 "<span class='sync-badge waiting' id='syncBadge'>⏳ Syncing...</span>"
+"</div>"
+"</div>"
+
+// Weather Card - TAMBAHKAN INI
+"<div class='card'>"
+"<div class='card-title'>Weather in Jakarta</div>"
+"<div id='weatherContent'>"
+"<div style='text-align:center;color:#a0aec0;padding:20px 0'>Loading...</div>"
 "</div>"
 "</div>"
 
@@ -147,6 +165,29 @@ static const char *provisioning_html =
 "sb.className='sync-badge waiting';"
 "}}).catch(e=>console.error(e));}"
 
+// Update weather
+"function updateWeather(){"
+"fetch('/api/weather').then(r=>r.json()).then(d=>{"
+"const content=document.getElementById('weatherContent');"
+"if(d.valid){"
+"content.innerHTML="
+"'<div class=\"weather-display\">'"
+"+'<div class=\"weather-item\">'"
+"+'<div class=\"weather-icon\">🌡️</div>'"
+"+'<div><span class=\"weather-value\">'+d.temperature.toFixed(1)+'</span><span class=\"weather-unit\">°C</span></div>'"
+"+'<div class=\"weather-label\">Temperature</div>'"
+"+'</div>'"
+"+'<div class=\"weather-item\">'"
+"+'<div class=\"weather-icon\">💧</div>'"
+"+'<div><span class=\"weather-value\">'+d.humidity+'</span><span class=\"weather-unit\">%</span></div>'"
+"+'<div class=\"weather-label\">Humidity</div>'"
+"+'</div>'"
+"+'</div>'"
+"+'<div class=\"weather-update\">Last update: '+d.last_update_str+'</div>';"
+"}else{"
+"content.innerHTML='<div style=\"text-align:center;color:#e53e3e;padding:20px 0\">⚠️ Weather data unavailable</div>';"
+"}}).catch(e=>console.error(e));}"
+
 // Update status
 "function updateStatus(){"
 "fetch('/api/status').then(r=>r.json()).then(d=>{"
@@ -168,10 +209,11 @@ static const char *provisioning_html =
 "}}).catch(e=>console.error(e));}"
 
 // Refresh all
-"function refreshAll(){updateTime();updateStatus();}"
+"function refreshAll(){updateTime();updateStatus();updateWeather();}"
 
 // Auto update
 "setInterval(updateTime,1000);"
+"setInterval(updateWeather,60000);" // Update every 60 seconds
 "refreshAll();"
 
 // Form submit
@@ -512,6 +554,44 @@ static esp_err_t api_time_handler(httpd_req_t *req)
 }
 
 /**
+ * Weather API handler
+ */
+static esp_err_t api_weather_handler(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    
+    weather_data_t weather;
+    bool has_data = weather_client_get_data(&weather);
+    
+    cJSON_AddBoolToObject(root, "valid", has_data);
+    
+    if (has_data) {
+        cJSON_AddNumberToObject(root, "temperature", weather.temperature);
+        cJSON_AddNumberToObject(root, "humidity", weather.humidity);
+        cJSON_AddNumberToObject(root, "last_update", (double)weather.last_update);
+        
+        // Format last update time
+        if (weather.last_update > 0) {
+            struct tm timeinfo;
+            localtime_r(&weather.last_update, &timeinfo);
+            char time_str[64];
+            strftime(time_str, sizeof(time_str), "%d.%m.%Y %H:%M:%S", &timeinfo);
+            cJSON_AddStringToObject(root, "last_update_str", time_str);
+        }
+    } else {
+        cJSON_AddStringToObject(root, "message", "No weather data available");
+    }
+    
+    char *json_str = cJSON_Print(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_str, strlen(json_str));
+    
+    free(json_str);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+/**
  * WiFi save API
  */
 static esp_err_t api_wifi_save_handler(httpd_req_t *req)
@@ -693,6 +773,9 @@ esp_err_t web_server_start(void)
         
         httpd_uri_t api_ota_update = {.uri = "/api/ota/update", .method = HTTP_POST, .handler = api_ota_update_handler};
         httpd_register_uri_handler(server, &api_ota_update);
+
+        httpd_uri_t api_weather = {.uri = "/api/weather", .method = HTTP_GET, .handler = api_weather_handler};
+        httpd_register_uri_handler(server, &api_weather);
         
         ESP_LOGI(TAG, "Web server started successfully");
         ESP_LOGI(TAG, "  Provisioning: http://192.168.4.1/");
