@@ -30,7 +30,6 @@ static EventGroupHandle_t wifi_event_group;
 #define WIFI_FAIL_BIT      BIT1
 
 // HTML page for WiFi provisioning
-// HTML page for WiFi provisioning with connection status
 static const char *html_page = 
 "<!DOCTYPE html>"
 "<html>"
@@ -43,6 +42,11 @@ static const char *html_page =
 ".container{background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.1);max-width:400px;width:100%}"
 "h1{color:#333;text-align:center;margin-bottom:10px}"
 ".subtitle{color:#666;text-align:center;margin-bottom:20px;font-size:14px}"
+".time-card{background:#f5f5f5;border-left:4px solid #2196F3;padding:15px;margin-bottom:20px;border-radius:5px;text-align:center}"
+".time-display{font-size:24px;font-weight:bold;color:#1976D2;font-family:monospace;margin:5px 0}"
+".time-label{font-size:12px;color:#666;margin-bottom:5px}"
+".sync-status{font-size:11px;color:#4CAF50;margin-top:5px}"
+".sync-status.waiting{color:#ff9800}"
 ".info-card{background:#e8f5e9;border-left:4px solid #4CAF50;padding:15px;margin-bottom:20px;border-radius:5px}"
 ".info-card.disconnected{background:#fff3cd;border-left-color:#ff9800}"
 ".info-title{font-weight:bold;color:#2e7d32;margin-bottom:8px;font-size:14px}"
@@ -68,9 +72,18 @@ static const char *html_page =
 "<div class='container'>"
 "<h1>ESP32-C6 Setup</h1>"
 "<p class='subtitle'>WiFi Configuration & Status</p>"
+
+"<div class='time-card'>"
+"<div class='time-label'>Current Time (WIB)</div>"
+"<div id='timeDisplay' class='time-display'>--:--:--</div>"
+"<div id='dateDisplay' style='font-size:14px;color:#666;margin-top:5px'>--.--.----</div>"
+"<div id='syncStatus' class='sync-status waiting'>Syncing with NTP...</div>"
+"</div>"
+
 "<div id='connectionStatus' class='info-card'>"
 "<div class='info-title'>Loading status...</div>"
 "</div>"
+
 "<form id='wifiForm'>"
 "<div class='form-group'>"
 "<label for='ssid'>WiFi SSID</label>"
@@ -85,7 +98,35 @@ static const char *html_page =
 "<button class='refresh-btn' onclick='loadStatus()'>Refresh Status</button>"
 "<div id='status' class='status'></div>"
 "</div>"
+
 "<script>"
+"function updateTime(){"
+"fetch('/time')"
+".then(response=>response.json())"
+".then(data=>{"
+"var timeDisplay=document.getElementById('timeDisplay');"
+"var dateDisplay=document.getElementById('dateDisplay');"
+"var syncStatus=document.getElementById('syncStatus');"
+"if(data.synced){"
+"var timeParts=data.time.split(' ');"
+"if(timeParts.length===2){"
+"dateDisplay.textContent=timeParts[0];"
+"timeDisplay.textContent=timeParts[1];"
+"}"
+"syncStatus.textContent='✓ Synchronized';"
+"syncStatus.className='sync-status';"
+"}else{"
+"timeDisplay.textContent='--:--:--';"
+"dateDisplay.textContent='Not synced';"
+"syncStatus.textContent='⏳ Waiting for NTP sync...';"
+"syncStatus.className='sync-status waiting';"
+"}"
+"})"
+".catch(error=>{"
+"console.error('Error fetching time:',error);"
+"});"
+"}"
+
 "function loadStatus(){"
 "fetch('/status')"
 ".then(response=>response.json())"
@@ -113,7 +154,12 @@ static const char *html_page =
 "console.error('Error loading status:',error);"
 "});"
 "}"
+
+// Update time every second
+"setInterval(updateTime,1000);"
+"updateTime();"
 "loadStatus();"
+
 "document.getElementById('wifiForm').addEventListener('submit',function(e){"
 "e.preventDefault();"
 "var ssid=document.getElementById('ssid').value;"
