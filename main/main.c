@@ -2,6 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 #include "led_indicator.h"
 #include "wifi_manager.h"
 
@@ -13,6 +14,15 @@ void on_wifi_connected(void)
     ESP_LOGI(TAG, "=== WiFi Connected Callback ===");
     led_set_system_status(LED_SYSTEM_CONNECTED);
     led_set_ap_mode(false);
+    
+    // Stop provisioning server
+    wifi_manager_stop_webserver();
+    
+    // Start OTA server (nanti kita buat)
+    // ota_server_init();  // <-- Next step
+    
+    // Sementara start web server biasa dulu untuk test
+    wifi_manager_start_webserver();
 }
 
 void on_wifi_disconnected(void)
@@ -38,21 +48,21 @@ void app_main(void)
     
     // Check if WiFi credentials exist
     if (wifi_manager_has_credentials()) {
-        ESP_LOGI(TAG, "WiFi credentials found, connecting to WiFi...");
+        ESP_LOGI(TAG, "WiFi credentials found, starting APSTA mode...");
         
-        // Try to connect to saved WiFi
-        if (wifi_manager_start_sta() == ESP_OK) {
-            ESP_LOGI(TAG, "Successfully connected to WiFi!");
-            // LED will be set via callback
-        } else {
-            ESP_LOGE(TAG, "Failed to connect, starting AP mode...");
-            wifi_manager_start_ap();
-            led_set_ap_mode(true);
-            led_set_system_status(LED_SYSTEM_OFF);
-        }
+        // Start APSTA mode (AP + STA)
+        wifi_manager_start_apsta_auto();
+        
+        // Start web server for provisioning
+        wifi_manager_start_webserver();
+        
+        // LED: AP always ON in APSTA mode
+        led_set_ap_mode(true);
+        
     } else {
-        ESP_LOGI(TAG, "No WiFi credentials, starting AP mode...");
+        ESP_LOGI(TAG, "No WiFi credentials, starting AP mode only...");
         wifi_manager_start_ap();
+        wifi_manager_start_webserver();
         led_set_ap_mode(true);
         led_set_system_status(LED_SYSTEM_OFF);
     }
@@ -61,29 +71,18 @@ void app_main(void)
     while (1) {
         wifi_state_t state = wifi_manager_get_state();
         
-        switch (state) {
-            case WIFI_STATE_AP_STARTED:
-                ESP_LOGI(TAG, "State: AP Mode - Connect to '%s' and go to %s", 
-                         WIFI_AP_SSID, WIFI_AP_IP);
-                break;
-                
-            case WIFI_STATE_STA_CONNECTED:
-                ESP_LOGI(TAG, "State: WiFi Connected");
-                break;
-                
-            case WIFI_STATE_STA_DISCONNECTED:
-                ESP_LOGI(TAG, "State: WiFi Disconnected (retrying...)");
-                break;
-                
-            case WIFI_STATE_STA_FAILED:
-                ESP_LOGE(TAG, "State: WiFi Failed - Switching to AP mode");
-                // Could switch to AP mode here as fallback
-                break;
-                
-            default:
-                break;
+        if (state == WIFI_STATE_STA_CONNECTED) {
+            esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+            if (netif) {
+                esp_netif_ip_info_t ip_info;
+                esp_netif_get_ip_info(netif, &ip_info);
+                ESP_LOGI(TAG, "APSTA Mode - STA IP: " IPSTR " | AP IP: %s", 
+                         IP2STR(&ip_info.ip), WIFI_AP_IP);
+            }
+        } else {
+            ESP_LOGI(TAG, "AP Mode Active: %s", WIFI_AP_IP);
         }
         
-        vTaskDelay(pdMS_TO_TICKS(10000)); // Log every 10 seconds
+        vTaskDelay(pdMS_TO_TICKS(15000));
     }
 }

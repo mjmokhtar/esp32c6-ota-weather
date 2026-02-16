@@ -11,7 +11,7 @@
 #define WIFI_AP_PASSWORD        "12345678"
 #define WIFI_AP_CHANNEL         1
 #define WIFI_AP_MAX_CONNECTIONS 4
-#define WIFI_AP_IP              "192.168.8.1"
+#define WIFI_AP_IP              "192.168.4.1"
 
 #define WIFI_STA_MAXIMUM_RETRY  5
 
@@ -50,5 +50,10 @@ bool wifi_manager_has_credentials(void);
 wifi_state_t wifi_manager_get_state(void);
 void wifi_manager_set_connected_callback(wifi_connected_cb_t callback);
 void wifi_manager_set_disconnected_callback(wifi_disconnected_cb_t callback);
-
+// Web server for provisioning
+esp_err_t wifi_manager_start_webserver(void);
+esp_err_t wifi_manager_stop_webserver(void);
+// Start WiFi in APSTA mode (AP + STA simultaneously)
+esp_err_t wifi_manager_start_apsta(void);
+esp_err_t wifi_manager_start_apsta_auto(void);
 #endif // WIFI_MANAGER_H
