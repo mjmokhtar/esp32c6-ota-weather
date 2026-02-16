@@ -7,6 +7,7 @@
 #include "lwip/inet.h"
 #include <string.h>
 #include "esp_http_server.h"
+#include "sntp_sync.h"
 #include "cJSON.h"
 
 static const char *TAG = "WIFI_MANAGER";
@@ -567,6 +568,54 @@ static esp_err_t status_get_handler(httpd_req_t *req)
 }
 
 /**
+ * HTTP GET handler - return current time as JSON
+ */
+static esp_err_t time_get_handler(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    
+    // Get time info
+    struct tm timeinfo;
+    bool time_valid = sntp_sync_get_time(&timeinfo);
+    
+    cJSON_AddBoolToObject(root, "synced", sntp_sync_is_synced());
+    
+    if (time_valid) {
+        // Format time string
+        char time_str[100];
+        strftime(time_str, sizeof(time_str), "%d.%m.%Y %H:%M:%S", &timeinfo);
+        cJSON_AddStringToObject(root, "time", time_str);
+        
+        // Add individual components
+        cJSON_AddNumberToObject(root, "year", timeinfo.tm_year + 1900);
+        cJSON_AddNumberToObject(root, "month", timeinfo.tm_mon + 1);
+        cJSON_AddNumberToObject(root, "day", timeinfo.tm_mday);
+        cJSON_AddNumberToObject(root, "hour", timeinfo.tm_hour);
+        cJSON_AddNumberToObject(root, "minute", timeinfo.tm_min);
+        cJSON_AddNumberToObject(root, "second", timeinfo.tm_sec);
+        
+        // Add epoch
+        cJSON_AddNumberToObject(root, "epoch", (double)sntp_sync_get_epoch());
+    } else {
+        cJSON_AddStringToObject(root, "time", "Not synchronized");
+        cJSON_AddStringToObject(root, "message", "Waiting for NTP sync...");
+    }
+    
+    // Convert to JSON string
+    char *json_str = cJSON_Print(root);
+    
+    // Send response
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_str, strlen(json_str));
+    
+    // Cleanup
+    free(json_str);
+    cJSON_Delete(root);
+    
+    return ESP_OK;
+}
+
+/**
  * Start WiFi in APSTA mode automatically using saved credentials
  */
 esp_err_t wifi_manager_start_apsta_auto(void)
@@ -680,6 +729,14 @@ esp_err_t wifi_manager_start_webserver(void)
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &status_uri);
+
+        httpd_uri_t time_uri = {
+            .uri       = "/time",
+            .method    = HTTP_GET,
+            .handler   = time_get_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &time_uri);
         
         ESP_LOGI(TAG, "Web server started - Access at http://%s", WIFI_AP_IP);
         return ESP_OK;

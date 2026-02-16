@@ -5,6 +5,7 @@
 #include "esp_netif.h"
 #include "led_indicator.h"
 #include "wifi_manager.h"
+#include "sntp_sync.h"
 
 static const char *TAG = "MAIN";
 
@@ -14,6 +15,8 @@ void on_wifi_connected(void)
     ESP_LOGI(TAG, "=== WiFi Connected Callback ===");
     led_set_system_status(LED_SYSTEM_CONNECTED);
     led_set_ap_mode(false);
+    // Initialize SNTP time sync
+    sntp_sync_init();
     
     // Stop provisioning server
     wifi_manager_stop_webserver();
